@@ -1,0 +1,383 @@
+""" This program asks for the user first name and last name
+and it outputs welcome message using the user inputs. It then
+prints out 9 options for the user regarding the housing rent
+categorized by property type and location and provides options
+to filter based on location and property type. it also contains
+a currency conversion function which accepts source currency and
+quantity and target currency then return a value of money in target
+currency. it also gives the equivalent of the user home currency in
+other currencies
+"""
+from enum import Enum
+import csv
+
+filename = './AB_NYC_2019.csv'
+
+class DataSet:
+    """DataSet class will look in to the data set of Borough and propert
+    and it will proved the min max and avg rent for the specified Boroug
+    property type enterd by the user
+    """
+    copyright = "No copyright has been set"
+
+    def __init__(self, header=""):
+        try:
+            self.header = header
+        except ValueError:
+            self.header = ""
+        self._data = None
+        self._labels = {DataSet.Categories.PROPERTY_TYPE: set(), DataSet.Categories.LOCATION: set()}
+        self._active_labels = {DataSet.Categories.PROPERTY_TYPE: set(), DataSet.Categories.LOCATION: set()}
+
+    def _initialize_sets(self):
+        """ Initialize the self._labels from self._data"""
+        if self._data == None:
+            raise DataSet.EmptyDatasetError
+        else:
+            for i in self._data:
+                self._labels[DataSet.Categories.PROPERTY_TYPE].add(i[1])
+                self._labels[DataSet.Categories.LOCATION].add(i[0])
+                self._active_labels[DataSet.Categories.PROPERTY_TYPE].add(i[1])
+                self._active_labels[DataSet.Categories.LOCATION].add(i[0])
+
+    class EmptyDatasetError(Exception):
+        pass
+
+    class NoMatchingItems(Exception):
+        pass
+
+    class Categories(Enum):
+        LOCATION = 1
+        PROPERTY_TYPE = 2
+
+    def get_labels(self, category: Categories):
+        return list(self._labels[category])
+
+    def get_active_labels(self, category: Categories):
+        return list(self._active_labels[category])
+
+    def toggle_active_label(self, category: Categories, descriptor: str):
+
+        if descriptor in self.get_labels(category):
+            if descriptor in self._active_labels[category]:
+                self._active_labels[category].remove(descriptor)
+            else:
+                self._active_labels[category].add(descriptor)
+        else:
+            raise KeyError
+
+    class Stats(Enum):
+        MIN = 0
+        AVG = 1
+        MAX = 2
+
+    def display_cross_table(self, stat: Stats):
+        """Display cross_table statistics based on the user input"""
+        if self._data == None:
+            raise DataSet.EmptyDatasetError
+        else:
+            type_list = list(self._labels[DataSet.Categories.PROPERTY_TYPE])
+            location_list = list(self._labels[DataSet.Categories.LOCATION])
+            print(f"{'':<20}", end="")
+            for i in type_list:
+                print(f"{i:<20}", end="")
+            print()
+            for i in location_list:
+                print(f"{i:<20}", end='')
+                for j in type_list:
+                    try:
+                        t_answer = self._cross_table_statistics(i, j)
+                        print(f"${t_answer[stat.value]:<19.2f}", end="")
+                    except DataSet.NoMatchingItems:
+                        print(f"${'NA':<19}", end="")
+                print()
+
+    def _cross_table_statistics(self, descriptor_one: str, descriptor_two: str):
+        """calculate summary stat for samples mathc both description"""
+        if self._data == None:
+            raise DataSet.EmptyDatasetError
+        t_list = [i[2] for i in self._data if i[0] == descriptor_one and i[1] == descriptor_two]
+        if len(t_list) == 0:
+            raise DataSet.NoMatchingItems
+        else:
+            return (min(t_list), sum(t_list) / len(t_list), max(t_list))
+
+    def load_default_data(self):
+        """loads sample data in the self._data"""
+        self._data = [("Staten Island", "Private room", 70), ("Brooklyn", "Private room", 50),
+                      ("Bronx", "Private room", 40), ("Brooklyn", "Entire home / apt", 150),
+                      ("Manhattan", "Private room", 125), ("Manhattan", "Entire home / apt", 196),
+                      ("Brooklyn", "Private room", 110), ("Manhattan", "Entire home / apt", 170),
+                      ("Manhattan", "Entire home / apt", 165), ("Manhattan", "Entire home / apt", 150),
+                      ("Manhattan", "Entire home / apt", 100), ("Brooklyn", "Private room", 65),
+                      ("Queens", "Entire home / apt", 350), ("Manhattan", "Private room", 98),
+                      ("Brooklyn", "Entire home / apt", 200), ("Brooklyn", "Entire home / apt", 150),
+                      ("Brooklyn", "Private room", 99), ("Brooklyn", "Private room", 120)]
+        self._initialize_sets()
+
+    @property
+    def header(self):
+        return self._header
+
+    @header.setter
+    def header(self, new_header=str):
+        if isinstance(new_header, str) and \
+                len(new_header) <= 30:
+            self._header = new_header
+        else:
+            raise ValueError
+
+    def _table_statistics(self, row_category: Categories, label: str):
+        """calculate summary stat for samples mathc both description"""
+        tem_l=[]
+        if row_category == DataSet.Categories.LOCATION:
+            for i in self._data:
+                if i[0]== label and i[1] in self._active_labels[DataSet.Categories.PROPERTY_TYPE]:
+                    tem_l.append(i[2])
+        elif row_category == DataSet.Categories.PROPERTY_TYPE:
+            for i in self._data:
+                if i[1] == label and i[0] in self._active_labels[DataSet.Categories.LOCATION]:
+                    tem_l.append(i[2])
+        if len(tem_l) > 0:
+            return (min(tem_l), sum(tem_l) / len(tem_l), max(tem_l))
+        else:
+            raise DataSet.NoMatchingItems
+
+    def display_field_table(self, rows: Categories):
+        """this function uses the _table_statistics to produce a table showing Min, avg and max
+        values of rent baseed on the user filter
+        """
+        header = ["MIN", "AVG", "MAX"]
+        if self._data == None:
+            raise DataSet.EmptyDatasetError
+        else:
+            if rows == DataSet.Categories.LOCATION:
+                for i in self._active_labels[DataSet.Categories.PROPERTY_TYPE]:
+                    print(f"{i:<20}")
+                print(f"{'':<20}", end="")
+                for i in header:
+                    print(f"{i:<20}", end="")
+                print()
+                for i in self._labels[DataSet.Categories.LOCATION]:
+                    try:
+                        result = DataSet._table_statistics(self,DataSet.Categories.LOCATION, i)
+                        if result != None:
+                            print(f"{i:<20}", end="")
+                            for j in result:
+                                print(f"{j:<20.2f}", end="")
+                            print()
+                    except DataSet.NoMatchingItems:
+                        print(f"{i:<20}No Matched item found")
+                        continue
+            elif rows == DataSet.Categories.PROPERTY_TYPE:
+                for i in self._active_labels[DataSet.Categories.LOCATION]:
+                    print(f"{i:<20}")
+                print(f"{'':<20}", end="")
+                for i in header:
+                    print(f"{i:<20}", end="")
+                print()
+                for i in self._labels[DataSet.Categories.PROPERTY_TYPE]:
+                    print(f"{i:<20}", end="")
+                    try:
+                        r = DataSet._table_statistics(self, DataSet.Categories.PROPERTY_TYPE, i)
+                        if r != None:
+                            for j in r:
+                                print(f"{j:<20.2f}", end="")
+                            print()
+                    except DataSet.NoMatchingItems:
+                        print(f"No Matched item found ")
+                        continue
+    def load_file(self):
+        """Load data from the file"""
+        with open(filename, "r", newline="") as file:
+            csvreader = csv.reader(file)
+            self._data = [i for i in csvreader]
+            self._data = self._data[1:]
+            self._data= [(i[1],i[2],int(i[3])) for i in self._data]
+            print("number of lines loaded ", len(self._data))
+            self._initialize_sets()
+        return (len(self._data))
+
+def manage_filters(dataset: DataSet, category: DataSet.Categories):
+    all_list = dataset.get_labels(category)
+    while (True):
+        if len(all_list) == 0:
+            print("plase load the data first OPtion8")
+            break
+        else:
+            print("The following labels are in the dataset:")
+            active_list = dataset.get_active_labels(category)
+            for i, j in enumerate(all_list, 1):
+                if j in active_list:
+                    print(f"{i} {j:<20} ACTIVE")
+                else:
+                    print(f"{i} {j:<20} INACTIVE")
+            answer = input("please choose to toggle or press enter to exist")
+            if answer == "":
+                break
+            else:
+                try:
+                    i_answer = int(answer)
+                    if (i_answer) <= (len(all_list) + 1) and i_answer != 0:
+                        dataset.toggle_active_label(category, all_list[i_answer - 1])
+                except:
+                    print("please enter number")
+
+conversion = {
+    "USD": 1,
+    "EUR": 0.9,
+    "CAD": 1.4,
+    "GBP": 0.8,
+    "CHF": 0.95,
+    "NZD": 1.66,
+    "AUD": 1.62,
+    "JPY": 107.92
+}
+home_currency = ""
+
+
+def currency_options(base_curr: str):
+    """accept currency from the user and print out the table
+    containing equivalent of the home currency to other currencies in
+    conversion table
+    """
+    temp_dictionary = {}
+    for i in conversion:
+        temp_dictionary[base_curr] = conversion[base_curr]
+        if i != base_curr:
+            temp_dictionary[i] = conversion[i]
+    for i in temp_dictionary:
+        print(f"{i:<10}", end="")
+    print()
+
+    for i in range(10, 100, 10):
+
+        for j in temp_dictionary:
+            print(f"{currency_converter(i, base_curr, j):<8.2f} ", end=" ")
+        print()
+
+
+def currency_converter(quantity: float, source_curr: str, target_curr: str):
+    """accept the quantity and source_curr and target_curr from the user
+     then return the value based on the target_currency
+     args:
+     quantity (float): how much money in source currency
+     source_curr (str): type of the original currency
+     target_curr (str): type of the target currency after conversion
+     return:
+     float: amount of money in target currency
+     """
+    try:
+        quantity = float(quantity)
+    except ValueError:
+        print("flaot number is expected as the quantity!!")
+    else:
+        if source_curr not in conversion \
+                or target_curr not in conversion:
+            raise KeyError
+        else:
+            dollar_value = quantity / conversion[source_curr]
+            return dollar_value * conversion[target_curr]
+
+
+def main():
+    """ Obtain user's first and last name then out put greeting
+    message.
+    """
+    DataSet.copyright = "Copy right message from Mohammad Shafieinouri"
+    air_bnb = DataSet()
+
+
+    global home_currency
+    f_name = input("Please enter your first name:")
+    l_name = input("please enter your last name:")
+    print("Hello", f_name, l_name, "Welcome to the class.")
+    currency_answer = False
+    while (currency_answer != True):
+        home_currency = input("what is your home currency?")
+        if home_currency in conversion:
+            currency_answer = True
+    currency_options(home_currency)
+    while True:
+        print("write a header for the menu?")
+        air_bnb.header = input()
+        if air_bnb.header != "":
+            break
+    menu(air_bnb)
+
+
+def print_menu():
+    """ Print menue with 9 options for the user to choose from"""
+    print("Main Menu \n"
+          "1 - Print Average Rent by Location and Property Type \n"
+          "2 - Print Minimum Rent by Location and Property Type \n"
+          "3 - Print Maximum Rent by Location and Property Type \n"
+          "4 - Print Min/Avg/Max by Location \n"
+          "5 - Print Min/Avg/Max by Property Type \n"
+          "6 - Adjust Location Filters \n"
+          "7 - just Property Type Filters \n"
+          "8 - Load Data \n"
+          "9 - Quit")
+
+
+def menu(dataset = DataSet()):
+    """Call the print function to print out the options for the user, then
+    accept a number 1-9 as the options and convert that to the integer.then
+    take an action based on the option chosen. loop through the menu until
+    specified by the user.
+    """
+
+    print(dataset.copyright)
+    int_u_option1 = 1
+    # print the menu until user specify quit
+    while int_u_option1 != 9:
+        print(dataset.header)
+
+        print_menu()
+        u_option1 = input("please choose an option between 1-9:")
+        try:
+            int_u_option1 = int(u_option1)
+        except ValueError:
+            print("please choose a number between 1-9 in numeric format!!")
+            continue
+
+        if int_u_option1 == 1:
+            try:
+                dataset.display_cross_table(dataset.Stats.AVG)
+            except:
+                print("Please load the data first")
+        elif int_u_option1 == 2:
+            try:
+                dataset.display_cross_table(dataset.Stats.MIN)
+            except:
+                print("Please Load the data first")
+        elif int_u_option1 == 3:
+            try:
+                dataset.display_cross_table(dataset.Stats.MAX)
+            except:
+                print("Please load the data first")
+        elif int_u_option1 == 4:
+            try:
+                dataset.display_field_table(DataSet.Categories.LOCATION)
+            except DataSet.EmptyDatasetError:
+                print("load the data set")
+        elif int_u_option1 == 5:
+            try:
+                dataset.display_field_table(DataSet.Categories.PROPERTY_TYPE)
+            except DataSet.EmptyDatasetError:
+                print("load the data set")
+        elif int_u_option1 == 6:
+            manage_filters(dataset, DataSet.Categories.LOCATION)
+        elif int_u_option1 == 7:
+            manage_filters(dataset, DataSet.Categories.PROPERTY_TYPE)
+        elif int_u_option1 == 8:
+            dataset.load_file()
+        elif int_u_option1 == 9:
+            print("Good Bye!")
+        else:
+            print("please enter a number between 1-9")
+
+
+
+if __name__ == "__main__":
+    main()
